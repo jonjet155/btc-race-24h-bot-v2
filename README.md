@@ -14,10 +14,10 @@ washout:
 - the tape ticks back up,
 - the close is within 0.4% of its 120-bar (2h) low,
 - and the price is at least 1.5% below the running high (tuned on the dev
-  window: 2.0% gave 2 trades / +$11.54, 1.5% gave 3 trades / +$13.74,
-  1.0% over-traded into −$4.64).
+  window with TP 1.9%: 2.0% washout bar gave 1 trade / +$11.54, 1.5% gave
+  3 trades / +$29.48, 1.2% over-traded into +$6.41).
 
-Exits: take profit +4.5%, stop loss −1.5%, or a 300-bar time stop, whole
+Exits: take profit +1.9%, stop loss −1.5%, or a 300-bar time stop, whole
 position. One position at a time, full-cash sizing, no shorts, no leverage.
 A 5% equity circuit breaker stops new entries after a drawdown from peak
 equity. Fully deterministic — pure functions of the closes seen, no clock,
@@ -38,11 +38,24 @@ v2 lowers the bar and adds a guaranteed-trade fallback, in tiers:
 | --- | --- | --- |
 | 1 — normal | always | washout ≥ 1.5% below running high |
 | 2 — late | bar 1000+, 0 trades | washout ≥ 1.5% |
-| 3 — fallback | bar 1200+, 0 trades | no drawdown gate: RSI < 40 + tick-up + near 120-bar low |
-| 4 — last call | bar 1320+, 0 trades | RSI < 45 + tick-up only |
+| 3 — fallback | bar 1000+, 0 trades | no drawdown gate: RSI < 40 + tick-up + near 120-bar low |
+| 4 — last call | bar 1150+, 0 trades | RSI < 45 + tick-up only |
 
-A 24h race has 1440 bars; bar 1320 still leaves 2 hours for the exit
-rules to work. The min-1-trade guardrail can never fail again.
+A 24h race has 1440 bars; bar 1150 still leaves nearly 5 hours for the
+exit rules to work. The min-1-trade guardrail can never fail again.
+
+## v2.1 tuning (2026-11-17)
+
+A 576-config sweep on the dev window plus replay on yesterday's range day.
+The dev window's moves are only ~2–2.5%, so TP +4.5% almost never fired
+(dev +$13.74). TP +1.9% banks the moves the window actually has: dev
+3 trades / +$29.48 / max DD 0.69%; range day 2 trades / +$16.66 /
+max DD 1.33%. TP 1.8–2.0% is a flat plateau (1.9% is its center); TP 2.1%
+collapses to $13.74, and TP 2.5–3% was tested and rejected. TIME_STOP 300
+beats 250 and 350 on both windows. Fallback moved earlier (1200→1000,
+1320→1150) so the insurance is in place before the mid-race NVIDIA
+earnings / FOMC minutes volatility; it never fired on either seen window.
+Oracle ceiling on dev is ~$31.59.
 
 ## Files
 

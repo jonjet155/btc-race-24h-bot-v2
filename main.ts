@@ -14,22 +14,37 @@
 // low + TP/SL/time-stop + full-cash sizing + equity circuit breaker) and
 // changes what "deep enough" means, in three tiers:
 //
-//   Tier 1 — normal:   price >= 2.0% below the running high.
+//   Tier 1 — normal:   price >= 1.5% below the running high.
 //   Tier 2 — late:     after bar 1000 with no trade yet, >= 1.5%.
-//   Tier 3 — fallback: after bar 1200 with no trade yet, the DD gate is
+//   Tier 3 — fallback: after bar 1000 with no trade yet, the DD gate is
 //                      dropped entirely: RSI(14) < 40, a tick back up, and
 //                      a close within 0.4% of the 120-bar low is enough.
-//   Tier 4 — last call: after bar 1320 with no trade yet, even the
+//   Tier 4 — last call: after bar 1150 with no trade yet, even the
 //                      near-low requirement is dropped: RSI(14) < 45 plus
 //                      a tick-up enters, so the min-1-trade guardrail can
-//                      never fail again. A 24h race has 1440 bars; bar 1320
-//                      still leaves 120 bars (2h) for the exit rules to work.
+//                      never fail again. A 24h race has 1440 bars; bar 1150
+//                      still leaves nearly 5 hours for the exit rules to work.
 //
-// Exits are unchanged from v1: take profit at +4.5% of cost, stop loss at
-// -1.5%, or a 300-bar time stop, whole position, one position at a time.
+// Exits (v2.1, tuned — see below): take profit at +1.9% of cost, stop loss
+// at -1.5%, or a 300-bar time stop, whole position, one position at a time.
 // A stop that hits during the flush is not a failure — the bot re-enters
 // lower on the next signal. No shorts, no leverage, deterministic (pure
 // functions of the closes seen; no clock, no randomness, no network).
+//
+// v2.1 tuning (576-config sweep on the dev window + replay on yesterday's
+// range day, 2026-11-17): the dev window's moves are only ~2-2.5%, so a
+// +4.5% take profit almost never fires — TP +1.9% banks the moves the
+// window actually has. TP 1.8-2.0% is a flat plateau (all $29.48 dev /
+// $16.66 range); 1.9% is its center. TP 2.1% collapses to $13.74, and the
+// brief's suggested TP 2.5-3% was tested and rejected ($20.24 dev / $10.66
+// range with a 600-bar stop). TIME_STOP 300 beats 250 ($27.33) and 350
+// ($28.79) on dev. Fallback moved earlier (1200->1000, 1320->1150): the
+// live race runs through NVIDIA earnings and the FOMC minutes mid-window,
+// so the insurance should be in place before that volatility, not after.
+// It never fired on either seen window — pure insurance, zero measured cost.
+// Dev: 3 trades / +$29.48 / max DD 0.69%. Range day: 2 trades / +$16.66 /
+// max DD 1.33%. Oracle ceiling on dev is ~$31.59, so this is near the top
+// of what the window offers; the rest is regime risk on the unseen race.
 
 import { runBars, type Bar, type BarsState, type BuyInput, type SellInput } from './vendor/makefun-bars.ts';
 
@@ -40,13 +55,13 @@ const RSI_LAST_CALL = 45; // tier 4 only: looser, the race is nearly over
 const LOW_BARS = 120; // near the 2-hour low
 const NEAR_LOW_PCT = 0.004; // within 0.4% of that low
 const DD_MIN = 0.015; // v1: 0.06 — the live window never reached 6%.
-// Tuned on the dev window: 0.02 gave 2 trades / +$11.54, 0.015 gave
-// 3 trades / +$13.74 (100% win rate), 0.01 over-traded (7 trades, -$4.64).
+// Tuned on the dev window with TP 1.9%: 0.02 gave 1 trade / +$11.54, 0.015 gave
+// 3 trades / +$29.48, 0.012 over-traded (3 trades, +$6.41).
 const LATE_BAR = 1000; // after this, if no trade yet, relax the washout bar
 const LATE_DD_MIN = 0.015; // v1: 0.04 — late threshold, 1.5%
-const FALLBACK_BAR = 1200; // after this, if no trade yet, drop the DD gate
-const LAST_CALL_BAR = 1320; // after this, if no trade yet, drop near-low too
-const TP_NUM = 1045; // take profit: value >= 104.5% of cost
+const FALLBACK_BAR = 1000; // after this, if no trade yet, drop the DD gate
+const LAST_CALL_BAR = 1150; // after this, if no trade yet, drop near-low too
+const TP_NUM = 1019; // take profit: value >= 101.9% of cost
 const TP_DEN = 1000;
 const SL_NUM = 985; // stop loss: value <= 98.5% of cost
 const SL_DEN = 1000;
